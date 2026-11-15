@@ -1,92 +1,229 @@
-const postInput = document.getElementById("postInput");
+const mediaInput = document.getElementById("mediaInput");
+const mediaPreview = document.getElementById("mediaPreview");
 const postBtn = document.getElementById("postBtn");
-const postsContainer = document.getElementById("posts");
+const feed = document.getElementById("feed");
 
-// CREATE POST
-postBtn.addEventListener("click", function () {
-  const text = postInput.value.trim();
+let selectedMedia = null;
 
-  if (text === "") {
-    alert("Andika ubutumwa bwawe!");
-    return;
-  }
+// Load saved posts
+let posts = JSON.parse(localStorage.getItem("junix_posts")) || [];
 
-  const post = document.createElement("article");
-  post.className = "post";
+// Preview selected media
+mediaInput.addEventListener("change", function () {
+    const file = this.files[0];
 
-  const header = document.createElement("div");
-  header.className = "post-header";
+    mediaPreview.innerHTML = "";
+    selectedMedia = null;
 
-  const author = document.createElement("strong");
-  author.textContent = "Junior";
+    if (!file) return;
 
-  const globe = document.createElement("span");
-  globe.textContent = "🌍";
-
-  header.appendChild(author);
-  header.appendChild(globe);
-
-  const message = document.createElement("p");
-  message.textContent = text;
-
-  const actions = document.createElement("div");
-  actions.className = "post-actions";
-
-  // LIKE BUTTON
-  const likeButton = document.createElement("button");
-  let likes = 0;
-  likeButton.textContent = "❤️ 0";
-
-  likeButton.addEventListener("click", function () {
-    likes++;
-    likeButton.textContent = "❤️ " + likes;
-  });
-
-  // COMMENT BUTTON
-  const commentButton = document.createElement("button");
-  commentButton.textContent = "💬 Comment";
-
-  commentButton.addEventListener("click", function () {
-    const comment = prompt("Andika comment yawe:");
-
-    if (comment && comment.trim() !== "") {
-      const commentText = document.createElement("p");
-      commentText.textContent = "💬 " + comment.trim();
-      commentText.className = "comment";
-      post.appendChild(commentText);
+    if (!file.type.startsWith("image/") &&
+        !file.type.startsWith("video/")) {
+        alert("Hitamo ifoto cyangwa video gusa!");
+        return;
     }
-  });
 
-  // SHARE BUTTON
-  const shareButton = document.createElement("button");
-  shareButton.textContent = "📤 Share";
+    const reader = new FileReader();
 
-  shareButton.addEventListener("click", async function () {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: "JuniX",
-          text: text
-        });
-      } catch (error) {
-        console.log("Sharing cancelled");
-      }
-    } else {
-      alert("Sharing ntikurashobokera kuri browser yawe.");
-    }
-  });
+    reader.onload = function (e) {
+        selectedMedia = {
+            type: file.type.startsWith("video/") ? "video" : "image",
+            src: e.target.result
+        };
 
-  actions.appendChild(likeButton);
-  actions.appendChild(commentButton);
-  actions.appendChild(shareButton);
+        const element = document.createElement(
+            selectedMedia.type === "video" ? "video" : "img"
+        );
 
-  post.appendChild(header);
-  post.appendChild(message);
-  post.appendChild(actions);
+        element.src = selectedMedia.src;
 
-  postsContainer.prepend(post);
+        if (selectedMedia.type === "video") {
+            element.controls = true;
+        }
 
-  postInput.value = "";
+        mediaPreview.appendChild(element);
+    };
+
+    reader.readAsDataURL(file);
 });
 
-console.log("JuniX irakora! 🚀");
+// Create new post
+postBtn.addEventListener("click", function () {
+    const text = document.querySelector("textarea").value.trim();
+
+    if (!text && !selectedMedia) {
+        alert("Andika ubutumwa cyangwa uhitemo media!");
+        return;
+    }
+
+    const post = {
+        id: Date.now(),
+        username: "JuniX User",
+        text: text,
+        media: selectedMedia,
+        likes: 0,
+        liked: false,
+        comments: []
+    };
+
+    posts.unshift(post);
+
+    savePosts();
+    renderPosts();
+
+    document.querySelector("textarea").value = "";
+    mediaInput.value = "";
+    mediaPreview.innerHTML = "";
+    selectedMedia = null;
+});
+
+// Save posts
+function savePosts() {
+    try {
+        localStorage.setItem("junix_posts", JSON.stringify(posts));
+    } catch (error) {
+        alert("Ububiko bwuzuye. Gerageza gukoresha video ntoya.");
+    }
+}
+
+// Display posts
+function renderPosts() {
+    if (!feed) return;
+
+    feed.innerHTML = "";
+
+    posts.forEach(post => {
+        const article = document.createElement("div");
+        article.className = "post";
+
+        const header = document.createElement("div");
+        header.className = "post-header";
+
+        const username = document.createElement("strong");
+        username.textContent = "@" + post.username;
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "⋮";
+        deleteBtn.onclick = () => deletePost(post.id);
+
+        header.append(username, deleteBtn);
+        article.appendChild(header);
+
+        if (post.text) {
+            const paragraph = document.createElement("p");
+            paragraph.textContent = post.text;
+            article.appendChild(paragraph);
+        }
+
+        if (post.media) {
+            const media = document.createElement(
+                post.media.type === "video" ? "video" : "img"
+            );
+
+            media.src = post.media.src;
+
+            if (post.media.type === "video") {
+                media.controls = true;
+                media.loop = true;
+                media.playsInline = true;
+            }
+
+            article.appendChild(media);
+        }
+
+        const actions = document.createElement("div");
+        actions.className = "post-actions";
+
+        const likeBtn = document.createElement("button");
+        likeBtn.textContent =
+            (post.liked ? "❤️ " : "🤍 ") + post.likes;
+
+        likeBtn.onclick = () => toggleLike(post.id);
+
+        const commentBtn = document.createElement("button");
+        commentBtn.textContent =
+            "💬 Comments (" + post.comments.length + ")";
+
+        commentBtn.onclick = () => addComment(post.id);
+
+        const shareBtn = document.createElement("button");
+        shareBtn.textContent = "↗ Share";
+        shareBtn.onclick = () => sharePost(post);
+
+        actions.append(likeBtn, commentBtn, shareBtn);
+        article.appendChild(actions);
+
+        // Display comments
+        post.comments.forEach(comment => {
+            const commentElement = document.createElement("p");
+            commentElement.textContent = "💬 " + comment;
+            article.appendChild(commentElement);
+        });
+
+        feed.appendChild(article);
+    });
+}
+
+// Like and unlike
+function toggleLike(id) {
+    const post = posts.find(p => p.id === id);
+    if (!post) return;
+
+    post.liked = !post.liked;
+    post.likes += post.liked ? 1 : -1;
+
+    savePosts();
+    renderPosts();
+}
+
+// Add comment
+function addComment(id) {
+    const comment = prompt("Andika comment yawe:");
+
+    if (!comment || !comment.trim()) return;
+
+    const post = posts.find(p => p.id === id);
+    if (!post) return;
+
+    post.comments.push(comment.trim());
+
+    savePosts();
+    renderPosts();
+}
+
+// Share post
+async function sharePost(post) {
+    const shareData = {
+        title: "JuniX",
+        text: post.text || "Reba iyi post kuri JuniX!",
+        url: location.href
+    };
+
+    try {
+        if (navigator.share) {
+            await navigator.share(shareData);
+        } else {
+            await navigator.clipboard.writeText(
+                shareData.text + " " + shareData.url
+            );
+            alert("Link yakoporowe!");
+        }
+    } catch (error) {
+        if (error.name !== "AbortError") {
+            alert("Ntibyashobotse gusangiza iyi post.");
+        }
+    }
+}
+
+// Delete post
+function deletePost(id) {
+    if (!confirm("Urashaka gusiba iyi post?")) return;
+
+    posts = posts.filter(post => post.id !== id);
+
+    savePosts();
+    renderPosts();
+}
+
+// Start JuniX
+renderPosts();
